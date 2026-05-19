@@ -803,11 +803,11 @@ function renderSetForm(idx, ex, last) {
     <div class="set-form">
       <div class="field">
         <label>Carga (kg)</label>
-        <input type="number" inputmode="decimal" step="0.5" id="w-${idx}" placeholder="${suggestW || '0'}" value="${suggestW}">
+        <input type="number" inputmode="decimal" step="0.5" id="w-${idx}" placeholder="${suggestW || '0'}" value="">
       </div>
       <div class="field">
         <label>Repetições</label>
-        <input type="number" inputmode="numeric" id="r-${idx}" placeholder="${suggestR || repHint || ex.targetReps}" value="${suggestR}">
+        <input type="number" inputmode="numeric" id="r-${idx}" placeholder="${suggestR || repHint || ex.targetReps}" value="">
       </div>
     </div>
     <button class="btn" data-action="log-set" data-idx="${idx}">
