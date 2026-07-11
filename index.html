@@ -196,6 +196,19 @@
   .set-row .del{color:var(--text-3);font-size:16px;padding:4px}
   .set-row .del:active{color:var(--red)}
 
+  .ex-comment{margin-top:12px}
+  .ex-comment label{
+    display:block;font-size:11px;color:var(--text-3);font-weight:600;
+    text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;
+  }
+  .ex-comment textarea{
+    width:100%;background:var(--surface-2);border:1px solid transparent;
+    border-radius:10px;padding:10px 12px;font-size:14px;color:var(--text);
+    resize:none;line-height:1.4;font-family:inherit;min-height:44px;
+  }
+  .ex-comment textarea:focus{border-color:var(--primary)}
+  .ex-comment textarea::placeholder{color:var(--text-3);opacity:.7}
+
   .set-form{
     display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;
   }
@@ -272,6 +285,7 @@
   }
   .ex-summary .n{font-weight:600;margin-bottom:6px}
   .ex-summary .s{font-size:13px;color:var(--text-2);font-variant-numeric:tabular-nums}
+  .ex-summary .s-comment{font-size:13px;color:var(--amber);font-style:italic;line-height:1.4;margin-top:8px}
 
   /* Confirm modal */
   .modal{
@@ -813,6 +827,10 @@ function viewWorkout() {
           `).join('')}
         </div>
         ${!isDone ? renderSetForm(idx, ex, last) : '<div class="last" style="text-align:center;color:var(--green)">✓ Exercício completo</div>'}
+        <div class="ex-comment">
+          <label>📝 Anotação — dor, dificuldade, sugestão…</label>
+          <textarea data-comment-idx="${idx}" rows="2" placeholder="Ex: senti fisgada no joelho, tá leve demais, trocar exercício…">${esc(ex.comment || '')}</textarea>
+        </div>
       </div>
     `;
     screen.appendChild(card);
@@ -998,7 +1016,8 @@ function viewHistory() {
     const actions = document.createElement('div');
     actions.className = 'menu-actions';
     actions.innerHTML = `
-      <button data-action="export">📤 Exportar dados (backup)</button>
+      <button data-action="share-all">📤 Compartilhar treinos + anotações</button>
+      <button data-action="export">💾 Exportar dados (backup)</button>
       <button data-action="import">📥 Importar dados</button>
       <button data-action="clear-history" style="color:var(--red)">🗑 Apagar todo histórico</button>
     `;
@@ -1045,12 +1064,14 @@ function viewSession() {
   screen.appendChild(stats);
 
   s.exercises.forEach(ex => {
-    if (!ex.sets.length) return;
+    const hasComment = ex.comment && ex.comment.trim();
+    if (!ex.sets.length && !hasComment) return;
     const sum = document.createElement('div');
     sum.className = 'ex-summary';
     sum.innerHTML = `
       <div class="n">${esc(ex.name)}</div>
-      <div class="s">${ex.sets.map(st => st.weight + 'kg × ' + st.reps).join(' &nbsp;·&nbsp; ')}</div>
+      ${ex.sets.length ? '<div class="s">' + ex.sets.map(st => st.weight + 'kg × ' + st.reps).join(' &nbsp;·&nbsp; ') + '</div>' : ''}
+      ${hasComment ? '<div class="s-comment">📝 ' + esc(ex.comment) + '</div>' : ''}
     `;
     screen.appendChild(sum);
   });
@@ -1058,6 +1079,7 @@ function viewSession() {
   const actions = document.createElement('div');
   actions.className = 'menu-actions';
   actions.innerHTML = `
+    <button data-action="share-session" data-id="${s.id}">📤 Compartilhar este treino</button>
     <button data-action="del-session" data-id="${s.id}" style="color:var(--red)">🗑 Excluir esta sessão</button>
   `;
   screen.appendChild(actions);
@@ -1097,7 +1119,8 @@ function doStart(type) {
       rest: e.rest,
       note: e.note || '',
       setLabels: e.setLabels || null,
-      sets: []
+      sets: [],
+      comment: ''
     }))
   };
   state.view = 'workout';
@@ -1193,7 +1216,8 @@ function finishWorkout() {
           name: e.name,
           targetSets: e.targetSets,
           targetReps: e.targetReps,
-          sets: e.sets
+          sets: e.sets,
+          comment: (e.comment || '').trim()
         }))
       };
       state.history.push(session);
@@ -1220,6 +1244,110 @@ function backFromWorkout() {
       persist(); render(); toast('Treino descartado');
     }
   });
+}
+
+/* ---------- SHARE (report as text) ---------- */
+function buildReport(sessions) {
+  const L = [];
+  L.push('🏋️ TREINOS — Rick');
+  L.push('Enviado em ' + fmtDateLong(Date.now()));
+  sessions.forEach(s => {
+    const sub = (TEMPLATES[s.type] && TEMPLATES[s.type].subtitle) || '';
+    const totalSets = s.exercises.reduce((a, e) => a + e.sets.length, 0);
+    L.push('');
+    L.push('━━━━━━━━━━━━━━━━━━');
+    L.push('📅 ' + s.name + (sub ? ' · ' + sub : ''));
+    L.push(fmtDateLong(s.date) + ' · ' + fmtDuration(s.duration) + ' · ' + totalSets + ' séries');
+    s.exercises.forEach((e, i) => {
+      const hasComment = e.comment && e.comment.trim();
+      if (!e.sets.length && !hasComment) return;
+      L.push('');
+      L.push((i + 1) + '. ' + e.name);
+      if (e.sets.length) L.push('   ' + e.sets.map(st => st.weight + 'kg × ' + st.reps).join('  ·  '));
+      if (hasComment) L.push('   📝 ' + e.comment.trim());
+    });
+  });
+  return L.join('\n');
+}
+
+function shareReport(sessions) {
+  if (!sessions || !sessions.length) { toast('Nenhum treino pra compartilhar'); return; }
+  const text = buildReport(sessions);
+  const canNative = !!navigator.share;
+  const m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = `
+    <div class="modal-card">
+      <h3>Compartilhar treinos</h3>
+      <p>Manda pra você mesmo (ou cola aqui no chat do Claude) — vai com os treinos feitos e suas anotações.</p>
+      <div class="row" style="flex-direction:column">
+        <button class="btn" data-s="whatsapp">📱 Enviar pro WhatsApp</button>
+        <button class="btn secondary" data-s="file">📄 Salvar como arquivo de texto</button>
+        ${canNative ? '<button class="btn secondary" data-s="native">📤 Outras opções…</button>' : ''}
+        <button class="btn secondary" data-s="copy">📋 Copiar tudo</button>
+        <button class="btn secondary" data-s="cancel">Cancelar</button>
+      </div>
+    </div>
+  `;
+  m.addEventListener('click', ev => {
+    if (ev.target === m) { m.remove(); return; }
+    const btn = ev.target.closest('[data-s]');
+    if (!btn) return;
+    const s = btn.dataset.s;
+    m.remove();
+    if (s === 'whatsapp') shareWhatsApp(text);
+    else if (s === 'file') shareTextFile(text);
+    else if (s === 'native') shareNative(text);
+    else if (s === 'copy') copyText(text);
+  });
+  document.body.appendChild(m);
+}
+
+function shareWhatsApp(text) {
+  const url = 'https://wa.me/?text=' + encodeURIComponent(text);
+  const w = window.open(url, '_blank');
+  if (!w) location.href = url;
+}
+
+async function shareTextFile(text) {
+  const filename = 'treinos-' + new Date().toISOString().slice(0, 10) + '.txt';
+  try {
+    const file = new File([text], filename, { type: 'text/plain' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Treinos' });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+  }
+  // Fallback: download the file
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Arquivo gerado');
+}
+
+async function shareNative(text) {
+  try { await navigator.share({ text }); } catch (e) { /* cancelado */ }
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copiado! Cola no chat do Claude 😉');
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast('Copiado!'); }
+    catch (_) { toast('Não consegui copiar'); }
+    ta.remove();
+  }
 }
 
 function exportData() {
@@ -1334,10 +1462,27 @@ document.addEventListener('click', ev => {
   else if (a === 'rest-skip') { skipRest(); }
   else if (a === 'finish') { finishWorkout(); }
   else if (a === 'back-workout') { backFromWorkout(); }
+  else if (a === 'share-all') { shareReport([...state.history].reverse()); }
+  else if (a === 'share-session') { const s = state.history.find(x => x.id === t.dataset.id); if (s) shareReport([s]); }
   else if (a === 'export') { exportData(); }
   else if (a === 'import') { importData(); }
   else if (a === 'clear-history') { clearHistory(); }
   else if (a === 'del-session') { deleteSession(t.dataset.id); }
+});
+
+/* Save per-exercise comment as it's typed (no re-render, so focus stays) */
+let _commentTimer = null;
+document.addEventListener('input', ev => {
+  const ta = ev.target.closest('[data-comment-idx]');
+  if (!ta || !state.active) return;
+  const idx = +ta.getAttribute('data-comment-idx');
+  const ex = state.active.exercises[idx];
+  if (!ex) return;
+  ex.comment = ta.value;
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+  clearTimeout(_commentTimer);
+  _commentTimer = setTimeout(persist, 400);
 });
 
 /* Enter key on inputs => log set */
