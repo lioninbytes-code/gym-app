@@ -118,6 +118,7 @@
     background:var(--surface);border-radius:var(--radius);
     margin-top:12px;border:1px solid var(--border);overflow:hidden;
     transition:border-color .2s;
+    scroll-margin-top:8px;
   }
   .exercise.current{border-color:var(--primary)}
   .exercise.done{opacity:.55}
@@ -469,6 +470,7 @@ const TEMPLATES = {
    STATE & STORAGE
    ========================================================================= */
 const STORAGE_KEY = 'treinos:v1';
+const UI_KEY = 'treinos:ui';
 const state = {
   view: 'home',          // home | workout | history | session
   history: [],           // array of completed sessions
@@ -476,6 +478,7 @@ const state = {
   detailId: null,        // id of session being viewed
   expanded: null,        // index of expanded exercise in workout view
   rest: null,            // { endTime, duration, nextExerciseName }
+  scrollToCurrent: false // after next render, auto-scroll to the current exercise
 };
 
 function load() {
@@ -487,6 +490,27 @@ function load() {
     if (state.rest && state.rest.endTime < Date.now() - 60000) {
       state.rest = null; // expired ages ago
     }
+    // iOS unloads the PWA while the screen is locked; put the user back where they were
+    const ui = JSON.parse(localStorage.getItem(UI_KEY)) || {};
+    if (ui.view === 'workout' && state.active) {
+      state.view = 'workout';
+      state.expanded = (typeof ui.expanded === 'number') ? ui.expanded : null;
+      state.scrollToCurrent = true;
+    } else if (ui.view === 'session' && ui.detailId && state.history.some(h => h.id === ui.detailId)) {
+      state.view = 'session';
+      state.detailId = ui.detailId;
+    } else if (ui.view === 'history') {
+      state.view = 'history';
+    }
+  } catch (e) { /* ignore */ }
+}
+function saveUI() {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify({
+      view: state.view,
+      detailId: state.detailId,
+      expanded: state.expanded,
+    }));
   } catch (e) { /* ignore */ }
 }
 function persist() {
@@ -576,13 +600,36 @@ function toast(msg) {
 /* =========================================================================
    VIEWS
    ========================================================================= */
+let lastRenderedView = null;
 function render() {
   const root = $('#app');
+  const prevScreen = root.querySelector('.screen');
+  const prevScroll = prevScreen ? prevScreen.scrollTop : 0;
   root.innerHTML = '';
   if (state.view === 'home') root.appendChild(viewHome());
   else if (state.view === 'workout') root.appendChild(viewWorkout());
   else if (state.view === 'history') root.appendChild(viewHistory());
   else if (state.view === 'session') root.appendChild(viewSession());
+
+  // Keep (or restore) the scroll position: re-renders wipe the DOM, which
+  // would otherwise throw the user back to the top of the screen.
+  const screen = root.querySelector('.screen');
+  if (screen) {
+    if (state.scrollToCurrent) {
+      state.scrollToCurrent = false;
+      const goToCurrent = () => {
+        const cur = root.querySelector('.exercise.current') || root.querySelector('.exercise.open');
+        if (cur) cur.scrollIntoView({ block: 'start' });
+      };
+      requestAnimationFrame(goToCurrent);
+      // re-apply: the browser may restore its own scroll position right after load
+      setTimeout(goToCurrent, 350);
+    } else if (state.view === lastRenderedView) {
+      screen.scrollTop = prevScroll;
+    }
+  }
+  lastRenderedView = state.view;
+  saveUI();
 
   if (state.rest) root.appendChild(restOverlay());
 }
@@ -885,6 +932,7 @@ function restOverlay() {
       overlay.classList.add('alert');
       setTimeout(() => {
         state.rest = null;
+        state.scrollToCurrent = true;
         persist();
         render();
       }, 1100);
@@ -1076,6 +1124,7 @@ function logSet(idx) {
     const next = w.exercises.find((e, i) => i > idx && e.sets.length < e.targetSets);
     nextExName = next ? next.name : 'Treino finalizado';
     state.expanded = next ? w.exercises.indexOf(next) : idx;
+    state.scrollToCurrent = true;
   }
 
   // Start rest timer (unless this was the last set of the last exercise)
@@ -1272,7 +1321,7 @@ document.addEventListener('click', ev => {
   if (a === 'history')   { state.view = 'history'; render(); }
   else if (a === 'home') { state.view = 'home'; render(); }
   else if (a === 'start') { startWorkout(t.dataset.type); }
-  else if (a === 'resume') { state.view = 'workout'; render(); }
+  else if (a === 'resume') { state.view = 'workout'; state.scrollToCurrent = true; render(); }
   else if (a === 'session') { state.detailId = t.dataset.id; state.view = 'session'; render(); }
   else if (a === 'toggle') {
     const i = +t.dataset.idx;
