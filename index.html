@@ -576,26 +576,35 @@ function getLastSession(exerciseName, beforeId) {
   return null;
 }
 
-/* Beep + visual alert when rest ends */
+/* Beep + visual alert when rest ends.
+   iOS only allows audio to play if the AudioContext was unlocked during a real
+   user gesture, so we prime it on every button tap (see the click handler). */
 let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { /* ignore */ }
+}
 function beep() {
   try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    ensureAudio();
+    if (!audioCtx) return;
     const t = audioCtx.currentTime;
-    [0, 0.18].forEach(offset => {
+    [0, 0.2, 0.4].forEach(offset => {
       const osc = audioCtx.createOscillator();
       const g = audioCtx.createGain();
       osc.connect(g); g.connect(audioCtx.destination);
+      osc.type = 'sine';
       osc.frequency.value = 880;
       g.gain.setValueAtTime(0, t + offset);
-      g.gain.linearRampToValueAtTime(0.25, t + offset + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.15);
+      g.gain.linearRampToValueAtTime(0.35, t + offset + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.17);
       osc.start(t + offset);
-      osc.stop(t + offset + 0.16);
+      osc.stop(t + offset + 0.18);
     });
   } catch (e) {}
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
 }
 
 /* Toast */
@@ -1466,6 +1475,7 @@ function confirmModal({ title, msg, confirmText, secondText, danger, onConfirm, 
 document.addEventListener('click', ev => {
   const t = ev.target.closest('[data-action]');
   if (!t) return;
+  ensureAudio(); // unlock audio within a user gesture so the rest-end beep can play later
   const a = t.dataset.action;
 
   if (a === 'history')   { state.view = 'history'; render(); }
