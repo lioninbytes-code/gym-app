@@ -141,6 +141,15 @@
   .exercise.open .ex-body{display:block}
   @keyframes slidein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
+  .yt-btn{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:9px 14px;border-radius:10px;margin-bottom:12px;
+    background:var(--surface-2);color:var(--text);font-size:13px;font-weight:600;
+    text-decoration:none;border:1px solid var(--border-2);
+  }
+  .yt-btn::before{content:'▶';color:#ff0000;font-size:11px}
+  .yt-btn:active{background:var(--surface-3);transform:scale(.98)}
+
   .last{
     font-size:12px;color:var(--text-3);padding:8px 12px;
     background:var(--surface-2);border-radius:8px;margin-bottom:12px;
@@ -830,6 +839,8 @@ function viewWorkout() {
 
     const last = getLastSession(ex.name);
     const lastWeights = last ? last.exercise.sets.map(s => s.weight).join(' · ') : null;
+    const ytQuery = ex.name.replace(/\s*\([^)]*\)/g, '').trim() + ' execução academia';
+    const ytUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ytQuery);
 
     card.innerHTML = `
       <div class="ex-head" data-action="toggle" data-idx="${idx}">
@@ -846,6 +857,7 @@ function viewWorkout() {
         <div class="chev">›</div>
       </div>
       <div class="ex-body">
+        <a class="yt-btn" href="${ytUrl}" target="_blank" rel="noopener">Ver no YouTube</a>
         ${lastWeights ? '<div class="last">Última (' + fmtRelDate(last.session.date) + '): <b>' + esc(lastWeights) + ' kg</b></div>' : ''}
         <div class="sets">
           ${ex.sets.map((s,i) => `
