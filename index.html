@@ -1357,7 +1357,7 @@ async function shareTextFile(text) {
   try {
     const file = new File([text], filename, { type: 'text/plain' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Treinos' });
+      await navigator.share({ files: [file] });
       return;
     }
   } catch (e) {

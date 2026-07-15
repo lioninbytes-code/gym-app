@@ -1,4 +1,4 @@
-const CACHE = 'treinos-v10';
+const CACHE = 'treinos-v11';
 const ASSETS = [
   './',
   './index.html',
