@@ -394,9 +394,9 @@ const TEMPLATES = {
       { name: "Mesa Flexora", sets: 3, reps: "10-12", rest: 90, note: "Última série com drop set: reduz a carga e continua até perto da falha." },
       { name: "Cadeira Abdutora", sets: 3, reps: "15", rest: 60 },
       {
-        name: "Panturrilha em pé",
+        name: "Panturrilha (máquina inclinada)",
         sets: 4, reps: "var.", rest: 60,
-        note: "Contração de pico: sobe, aperta 3s, desce afundando bem o calcanhar.",
+        note: "Máquina inclinada tipo prensa (carga na plataforma, não na coluna). Contração de pico: empurra na ponta do pé, aperta 3s, desce afundando bem o calcanhar.",
         setLabels: [
           "Carga alta · ~10 reps",
           "Carga alta · ~10 reps",
@@ -510,6 +510,11 @@ function load() {
     state.history = s.history || [];
     state.active = s.active || null;
     state.rest = s.rest || null;
+    // Keep old sessions linked when an exercise gets renamed
+    const RENAMES = { 'Panturrilha em pé': 'Panturrilha (máquina inclinada)' };
+    state.history.forEach(sess => (sess.exercises || []).forEach(ex => {
+      if (RENAMES[ex.name]) ex.name = RENAMES[ex.name];
+    }));
     if (state.rest && state.rest.endTime < Date.now() - 60000) {
       state.rest = null; // expired ages ago
     }
